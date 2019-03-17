@@ -22,9 +22,10 @@ Transfer-Encoding: chunked
 
 ```json
 [
-    "   get books:  http get  :8080/books",
-    "  get genres:  http get  :8080/genres",
-    " create book:  http post :8080 content={content}"
+    "   get books:  http get    :8080/books",
+    "   find book:  http get    :8080/book/{id}",
+    " delete book:  http delete :8080/book/{id}",
+    " create book:  http post   :8080 content={content}"
 ]
 ```
 
@@ -101,3 +102,4 @@ Transfer-Encoding: chunked
 * [Part 1: Spring Data JDBC - Getting started introduction](https://spring.io/blog/2018/09/17/introducing-spring-data-jdbc)
 * [Part 2: Spring Data JDBC - References and Aggregates](https://spring.io/blog/2018/09/24/spring-data-jdbc-references-and-aggregates)
 * [Domain-Driven Design and Spring](http://static.olivergierke.de/lectures/ddd-and-spring/)
+* [YouTube: Spring Data JDBC - One to One & One to Many Relationships](https://www.youtube.com/watch?v=ccxBXDAPdmo)

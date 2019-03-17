@@ -52,13 +52,13 @@ class MyDS {
 @Getter
 @ToString
 @EqualsAndHashCode
-@AllArgsConstructor
-class Genre {
+@AllArgsConstructor(access = PACKAGE)
+class Genre { // reference to Book AggregateRoot
   public static final Genre UNDEFINED = new Genre(null, "Undefined");
 
   @Id
-  private Long id;
-  private String name;
+  private final Long id;
+  private final String name;
 }
 
 @Wither
@@ -69,11 +69,11 @@ class Genre {
 class Book { // AggregateRoot
 
   @Id
-  private Long id;
-  private LocalDateTime lastModified; // But not ZonedDateTime...
-  private UUID aggregateId;
-  private String content;
-  private Genre genre; // one-to-one, see Genre
+  private final Long id;
+  private final LocalDateTime lastModified; // But not ZonedDateTime...
+  private final UUID aggregateId;
+  private final String content;
+  private final Genre genre; // one-to-one
 
   public Book withLastModifiedUpdated() {
     return this.withLastModified(LocalDateTime.now());
@@ -123,7 +123,7 @@ class MyJDBC extends JdbcConfiguration {
 */
 
 @Log4j2
-@Transactional
+@Transactional // do not forget use transaction
 @RestController
 @RequiredArgsConstructor
 class MyREST {
