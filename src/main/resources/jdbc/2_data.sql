@@ -1,0 +1,1 @@
+-- insert into genre (id, name, book) values (-1, 'Undefined', -1);

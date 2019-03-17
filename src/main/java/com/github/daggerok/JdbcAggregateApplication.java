@@ -1,6 +1,9 @@
 package com.github.daggerok;
 
-import lombok.*;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import lombok.ToString;
 import lombok.experimental.Wither;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.boot.SpringApplication;
@@ -9,18 +12,21 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.LastModifiedDate;
-import org.springframework.data.jdbc.repository.query.Query;
-import org.springframework.data.relational.core.mapping.Column;
-import org.springframework.data.relational.core.mapping.Table;
 import org.springframework.data.repository.CrudRepository;
+import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseBuilder;
 import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseType;
 import org.springframework.web.bind.annotation.*;
 
 import javax.sql.DataSource;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+
+import static java.util.Arrays.asList;
 
 @Configuration
 class MyDS {
@@ -28,14 +34,15 @@ class MyDS {
   @Bean
   DataSource dataSource() {
     return new EmbeddedDatabaseBuilder().setType(EmbeddedDatabaseType.H2)
-                                        .addScripts("jdbc/1_schema.sql"/*, "jdbc/2_data.sql"*/)
+                                        //.addScripts("jdbc/1_schema.sql", "jdbc/2_data.sql")
+                                        .addScripts("jdbc/1_schema.sql")
                                         .build();
   }
 }
 
 /**
  * See 1_schema.sql script. we have added my_table column in referencing entity in my_sub_table table
- *
+ * <p>
  * References to other entities. They are considered a one-to-one relationship. It is optional
  * for such entities to have an id attribute. The table of the referenced entity is expected
  * to have an additional column named the same as the table of the referencing entity. You can
@@ -47,6 +54,8 @@ class MyDS {
 @EqualsAndHashCode
 @RequiredArgsConstructor
 class Genre {
+
+  public static final Genre UNDEFINED = new Genre(null, "Undefined");
 
   @Id
   private final Long id;
@@ -60,33 +69,7 @@ interface GenreRepository extends CrudRepository<Genre, Long> {}
 @ToString
 @EqualsAndHashCode
 @RequiredArgsConstructor
-class Author {
-
-  @Id
-  private final Long id;
-  private final String name;
-
-  public static Author of(String name) {
-    return new Author(null, name);
-  }
-}
-
-interface AuthorRepository extends CrudRepository<Author, Long> {}
-
-@Getter
-@EqualsAndHashCode
-@RequiredArgsConstructor
-@Table("Book_Author")
-class AuthorRef {
-  @NonNull private Long author;
-}
-
-@Wither
-@Getter
-@ToString
-@EqualsAndHashCode
-@RequiredArgsConstructor
-class Book {
+class Book { // AggregateRoot
 
   @Id
   private final Long id;
@@ -96,31 +79,14 @@ class Book {
 
   private final UUID aggregateId; // org.springframework.core.convert.support.StringToUUIDConverter
   private final String content;
-  private final Genre genre;
-  private final Set<AuthorRef> authors;
-
-  Book withAuthor(Author author) {
-    Objects.requireNonNull(author, "author may not be null.");
-    Long authorId = Objects.requireNonNull(author.getId(), "author ID may not be null.");
-    AuthorRef ref = new AuthorRef(authorId);
-    authors.add(ref);
-    return this.withLastModified(LocalDateTime.now());
-  }
+  private final Genre genre; // one-to-one
 
   public static Book of(String content) {
-    Genre undefinedGenre = new Genre(null, "Undefined");
-    return new Book(
-        null, LocalDateTime.now(), UUID.randomUUID(), content, undefinedGenre, new HashSet<>()
-    );
+    return new Book(null, LocalDateTime.now(), UUID.randomUUID(), content, Genre.UNDEFINED);
   }
 }
 
-interface BookRepository extends CrudRepository<Book, Long> {
-
-  @Query("  select b.id, b.last_modified, b.aggregate_id, b.content " +
-      "     from book b left outer join genre g on g.book = b.id    ")
-  List<Book> findBooks();
-}
+interface BookRepository extends CrudRepository<Book, Long> {}
 
 /* // Seems like this one os optional...
 @Configuration
@@ -149,21 +115,23 @@ class MyREST {
 
   final BookRepository books;
   final GenreRepository genres;
-  final AuthorRepository authors;
+
+  @DeleteMapping("/book/{id}")
+  public CompletableFuture<Void> deleteBook(@PathVariable("id") Long id) {
+    return CompletableFuture.supplyAsync(() -> {
+      books.deleteById(id);
+      return null;
+    });
+  }
 
   @GetMapping("/books")
   public Iterable<Book> getBooks() {
-    return books.findBooks();
+    return books.findAll();
   }
 
   @GetMapping("/genres")
   public Iterable<Genre> getGenres() {
     return genres.findAll();
-  }
-
-  @GetMapping("/authors")
-  public Iterable<Author> getAuthors() {
-    return authors.findAll();
   }
 
   @PostMapping
@@ -173,8 +141,7 @@ class MyREST {
       //Book book = new Book(UUID.randomUUID(), data);
       Book book = books.save(Book.of(content));
       log.info("book created: {}", book);
-      Author author = authors.save(Author.of("me"));
-      return books.save(book.withAuthor(author));
+      return book;
     });
   }
 
@@ -189,8 +156,14 @@ class MyREST {
   }*/
 
   @RequestMapping
-  public Iterable<Book> apiFallback() {
-    return books.findAll();
+  public ResponseEntity<List> apiFallback() {
+    return ResponseEntity.ok(
+        asList(
+            "   get books:  http get  :8080/books",
+            "  get genres:  http get  :8080/genres",
+            " create book:  http post :8080 content={content}"
+        )
+    );
   }
 }
 

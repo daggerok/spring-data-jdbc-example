@@ -1,26 +1,12 @@
-drop table if exists author;
 drop table if exists genre;
 drop table if exists book;
-
-create table author(
-  id bigserial not null
-    constraint author_pkey
-      primary key,
-  name varchar(255) not null,
---  book bigint not null,
-);
 
 create table genre(
   id bigserial not null
     constraint genre_pkey
       primary key,
   name varchar(255) not null,
-  book bigint not null,
-);
-
-create table book_author(
-  book bigint not null,
-  author bigint not null,
+  book bigint not null, -- this one is required for proper one to many FK (see Book.genre field)
 );
 
 create table book(
