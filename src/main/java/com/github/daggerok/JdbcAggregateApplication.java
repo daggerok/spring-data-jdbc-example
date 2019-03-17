@@ -41,7 +41,7 @@ class MyDS {
 }
 
 /**
- * See 1_schema.sql script. we have added my_table column in referencing entity in my_sub_table table
+ * See 1_schema.sql script. we have added book column in referencing entity in book table (same as ref name)
  * <p>
  * References to other entities. They are considered a one-to-one relationship. It is optional
  * for such entities to have an id attribute. The table of the referenced entity is expected
