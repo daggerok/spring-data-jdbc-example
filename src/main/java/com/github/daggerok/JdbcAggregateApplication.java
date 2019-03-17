@@ -1,9 +1,6 @@
 package com.github.daggerok;
 
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-import lombok.ToString;
+import lombok.*;
 import lombok.experimental.Wither;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.boot.SpringApplication;
@@ -11,11 +8,12 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.annotation.Id;
-import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jdbc.repository.query.Query;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseBuilder;
 import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseType;
+import org.springframework.stereotype.Repository;
 import org.springframework.web.bind.annotation.*;
 
 import javax.sql.DataSource;
@@ -27,12 +25,13 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import static java.util.Arrays.asList;
+import static lombok.AccessLevel.PACKAGE;
 
 @Configuration
 class MyDS {
 
   @Bean
-  DataSource dataSource() {
+  public DataSource dataSource() {
     return new EmbeddedDatabaseBuilder().setType(EmbeddedDatabaseType.H2)
                                         //.addScripts("jdbc/1_schema.sql", "jdbc/2_data.sql")
                                         .addScripts("jdbc/1_schema.sql")
@@ -52,41 +51,56 @@ class MyDS {
 @Getter
 @ToString
 @EqualsAndHashCode
-@RequiredArgsConstructor
+@AllArgsConstructor
 class Genre {
-
   public static final Genre UNDEFINED = new Genre(null, "Undefined");
 
   @Id
-  private final Long id;
-  private final String name;
+  private Long id;
+  private String name;
 }
-
-interface GenreRepository extends CrudRepository<Genre, Long> {}
 
 @Wither
 @Getter
 @ToString
 @EqualsAndHashCode
-@RequiredArgsConstructor
+@AllArgsConstructor(access = PACKAGE)
 class Book { // AggregateRoot
 
   @Id
-  private final Long id;
+  private Long id;
+  //@LastModifiedDate // But not ZonedDateTime...
+  private LocalDateTime lastModified;
+  private UUID aggregateId; // org.springframework.core.convert.support.StringToUUIDConverter
+  private String content;
+  private Genre genre; // one-to-one
 
-  @LastModifiedDate // But not ZonedDateTime...
-  private final LocalDateTime lastModified;
-
-  private final UUID aggregateId; // org.springframework.core.convert.support.StringToUUIDConverter
-  private final String content;
-  private final Genre genre; // one-to-one
+  public Book withLastModifiedUpdated() {
+    return this.withLastModified(LocalDateTime.now());
+  }
 
   public static Book of(String content) {
-    return new Book(null, LocalDateTime.now(), UUID.randomUUID(), content, Genre.UNDEFINED);
+    return new Book(null, LocalDateTime.now(), UUID.randomUUID(), content, null);
+  }
+
+  public static Book of(String content, Genre genre) {
+    return new Book(null, LocalDateTime.now(), UUID.randomUUID(), content, genre);
   }
 }
 
-interface BookRepository extends CrudRepository<Book, Long> {}
+@Repository
+interface BookRepository extends CrudRepository<Book, Long> {
+
+//  @Query(
+//      "   SELECT                                    " +
+//      "       book.id AS id                         " +
+//      "     , book.last_modified AS last_modified   " +
+//      "     , book.aggregate_id AS aggregate_id     " +
+//      "     , book.content AS content               " +
+//      "   FROM book                                 "
+//  )
+//  Iterable<Book> findMeAllBooks();
+}
 
 /* // Seems like this one os optional...
 @Configuration
@@ -114,14 +128,23 @@ class MyJDBC extends JdbcConfiguration {
 class MyREST {
 
   final BookRepository books;
-  final GenreRepository genres;
 
   @DeleteMapping("/book/{id}")
-  public CompletableFuture<Void> deleteBook(@PathVariable("id") Long id) {
+  public CompletableFuture<String> deleteBook(@PathVariable("id") Long id) {
     return CompletableFuture.supplyAsync(() -> {
-      books.deleteById(id);
-      return null;
+      books.findById(id)
+           .map(book -> {
+             System.out.println("book = " + book);
+             return book;
+           })
+           .ifPresent(books::delete);
+      return "Accepted.";
     });
+  }
+
+  @GetMapping("/book/{id}")
+  public Book getBook(@PathVariable("id") Long id) {
+    return books.findById(id).orElse(null);
   }
 
   @GetMapping("/books")
@@ -129,38 +152,24 @@ class MyREST {
     return books.findAll();
   }
 
-  @GetMapping("/genres")
-  public Iterable<Genre> getGenres() {
-    return genres.findAll();
-  }
-
   @PostMapping
-  public CompletableFuture<Book> post(@RequestBody Map<String, String> request) {
+  public CompletableFuture<Iterable<Book>> post(@RequestBody Map<String, String> request) {
     return CompletableFuture.supplyAsync(() -> {
       String content = Objects.requireNonNull(request.get("content"), "content parameter is required.");
       //Book book = new Book(UUID.randomUUID(), data);
-      Book book = books.save(Book.of(content));
-      log.info("book created: {}", book);
-      return book;
+      Book book1 = books.save(Book.of(content));
+      log.info("book created: {}", book1);
+      Book book2 = books.save(Book.of(content, Genre.UNDEFINED));
+      log.info("book created: {}", book2);
+      return asList(book1, book2);
     });
   }
-
-  /*@PostMapping
-  public ResponseEntity<?> post(@RequestBody Map<String, String> request, HttpServletRequest req) {
-    String data = Objects.requireNonNull(request.get("data"), "data parameter is required.");
-    Book myEntity = new Book(UUID.randomUUID(), data);
-    Book saved = myEntityRepository.save(myEntity);
-    log.info("saved: {}", saved);
-    return ResponseEntity.created(URI.create(format("/%s", saved.getId())))
-                         .body(saved);
-  }*/
 
   @RequestMapping
   public ResponseEntity<List> apiFallback() {
     return ResponseEntity.ok(
         asList(
             "   get books:  http get  :8080/books",
-            "  get genres:  http get  :8080/genres",
             " create book:  http post :8080 content={content}"
         )
     );
