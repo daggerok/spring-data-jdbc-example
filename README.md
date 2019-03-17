@@ -1,5 +1,5 @@
 # Spring Data JDBC
-Quickstart with spring-data-jdbc. Fast and light releational database access almost with no overhead (still many opened questions here and a lot of stuff to learn...)
+Quickstart with spring-data-jdbc. Fast and light relational database access almost with no overhead (still many opened questions here and a lot of stuff to learn...)
 
 ## run
 

@@ -14,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseBuilder;
 import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseType;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import javax.sql.DataSource;
@@ -69,11 +70,10 @@ class Book { // AggregateRoot
 
   @Id
   private Long id;
-  //@LastModifiedDate // But not ZonedDateTime...
-  private LocalDateTime lastModified;
-  private UUID aggregateId; // org.springframework.core.convert.support.StringToUUIDConverter
+  private LocalDateTime lastModified; // But not ZonedDateTime...
+  private UUID aggregateId;
   private String content;
-  private Genre genre; // one-to-one
+  private Genre genre; // one-to-one, see Genre
 
   public Book withLastModifiedUpdated() {
     return this.withLastModified(LocalDateTime.now());
@@ -123,6 +123,7 @@ class MyJDBC extends JdbcConfiguration {
 */
 
 @Log4j2
+@Transactional
 @RestController
 @RequiredArgsConstructor
 class MyREST {
@@ -134,7 +135,7 @@ class MyREST {
     return CompletableFuture.supplyAsync(() -> {
       books.findById(id)
            .map(book -> {
-             System.out.println("book = " + book);
+             log.info("going to remove a book: {}", book);
              return book;
            })
            .ifPresent(books::delete);
@@ -156,11 +157,10 @@ class MyREST {
   public CompletableFuture<Iterable<Book>> post(@RequestBody Map<String, String> request) {
     return CompletableFuture.supplyAsync(() -> {
       String content = Objects.requireNonNull(request.get("content"), "content parameter is required.");
-      //Book book = new Book(UUID.randomUUID(), data);
       Book book1 = books.save(Book.of(content));
-      log.info("book created: {}", book1);
+      log.info("created book without genre: {}", book1);
       Book book2 = books.save(Book.of(content, Genre.UNDEFINED));
-      log.info("book created: {}", book2);
+      log.info("created book with genre: {}", book2);
       return asList(book1, book2);
     });
   }
@@ -169,8 +169,10 @@ class MyREST {
   public ResponseEntity<List> apiFallback() {
     return ResponseEntity.ok(
         asList(
-            "   get books:  http get  :8080/books",
-            " create book:  http post :8080 content={content}"
+            "   get books:  http get    :8080/books",
+            "   find book:  http get    :8080/book/{id}",
+            " delete book:  http delete :8080/book/{id}",
+            " create book:  http post   :8080 content={content}"
         )
     );
   }
